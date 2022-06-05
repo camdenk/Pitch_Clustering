@@ -38,6 +38,20 @@ class: inverse center middle
 
 ---
 class: center
+# Background
+
+.bg-black-05.b--black.ba.bw1.br3.ph4.mt5[
+.left[
+- Traditional pitch classifications are broken.
+- Pitch names give people a general idea of what a pitch moves like and how hard it’s thrown, but the lack of detail can cloud analysis when looking at specific pitch types.
+
+- One pitcher’s slider might match another pitcher’s curveball metrics well, but they would traditionally be separated into different buckets for analyzing (unless one is looking at the fastball/breaking ball/offspeed split).
+
+- Using clusters allows analysts to better dive into why player X’s and Y’s pitches may be performing differently when very similar metrically.
+]]
+
+---
+class: center
 
 ```r
 library(tidyverse)
@@ -144,9 +158,17 @@ cleaned_clusters &lt;- pam(cluster_data, k = 17, metric = "euclidean")
 write_csv(cleaned_clusters$medoids |&gt; as_tibble(), "./Medoids.csv")
 ```
 
+
+.bg-black-05.b--black.ba.bw1.br3.ph4.mt5[
+.left[
+- I came up with 17 different subcategories within traditional pitch types
+- This number is obviously affected by prior knowledge and plays a role in biasing the results of the analysis considering k-means clusters takes an input for number of clusters to produce.
+]]
+
+
 ---
 class: center
-# Cluster Function
+# Return Cluster Function
 
 ```r
 # Loading saved medoids
@@ -174,9 +196,13 @@ class: inverse center middle
 class: center
 # Table
 
+
+
 ```r
 #Analyze old pitch_names with clusters
 table(mlb_clusters$cluster, mlb_clusters$pitch_type)
+# Old pitch names map out well with new clusters
+# There's only a few "weird" results
 ```
 
 
@@ -202,6 +228,7 @@ table(mlb_clusters$cluster, mlb_clusters$pitch_type)
 ##   17   0  10 145   0   0   0  32   0   1
 ```
 
+ 
 ---
 class: center
 # Clustered Plots
@@ -213,6 +240,12 @@ class: center
 .pull-right[
 &lt;img src="./Images/Movement Clusters.png" width="1067" /&gt;
 ]
+
+.bg-black-05.b--black.ba.bw1.br3.ph4.mt5[
+.left[
+- When plotted by movement numbers, the clusters have very little overlap. 
+- The only true blend occurs between lower vertical break fastballs and changeups/splitters which would be expected as the main separator between those pitches is velocity. 
+]]
 
 ---
 class: center
@@ -286,17 +319,80 @@ class: center
 ---
 class: center
 # Metric Averages
-&lt;img src="./Images/Cluster Metric Averages.png" width="521" /&gt;
+&lt;img src="./Images/Cluster Metric Averages.png" width="50%" /&gt;
+.bg-black-05.b--black.ba.bw1.br3.ph4.mt5[
+.left[
+- The fastball clusters clearly separate themselves by having an average velo ratio of &gt; 95%
+]]
+
+---
+class: center
+# Manually Input Pitch Groups
+
+
+```r
+# Manually created tibble based on pitch metrics
+manually_set_cluster_names
+```
+
+```
+## # A tibble: 17 × 3
+##    cluster pitch_group       pitch_class  
+##    &lt;fct&gt;   &lt;chr&gt;             &lt;chr&gt;        
+##  1 1       Fastball          Fastball     
+##  2 2       Changeup-Splitter Offspeed     
+##  3 3       Curveball         Breaking Ball
+##  4 4       Slutter           Breaking Ball
+##  5 5       Fastball          Fastball     
+##  6 6       Sinker            Fastball     
+##  7 7       Slider            Breaking Ball
+##  8 8       Changeup-Splitter Offspeed     
+##  9 9       Slider            Breaking Ball
+## 10 10      Fastball          Fastball     
+## 11 11      Cutter            Fastball     
+## 12 12      Slider            Breaking Ball
+## 13 13      Sinker            Fastball     
+## 14 14      Fastball          Fastball     
+## 15 15      Curveball         Breaking Ball
+## 16 16      Changeup-Splitter Offspeed     
+## 17 17      Curveball         Breaking Ball
+```
+
+
 
 ---
 class: center
 # Pitch Results Averages
-&lt;img src="./Images/Cluster Results Averages.png" width="344" /&gt;
+&lt;img src="./Images/Cluster Results Averages.png" width="35%" /&gt;
+.bg-black-05.b--black.ba.bw1.br3.ph4.mt5[
+.left[
+- Unsurprisingly, the only pitches that had a negative average run value per 100 pitches were breaking ball variants. 
+- When compared back to the movement plots we can The slutter (cluster 4), the sweeping slider (12), and sweeping curveball (3) all performed extremely well in the 2021 season.
+]]
 
 ---
 class: center
 # "New" Pitch Groups
-&lt;img src="./Images/Movement Clusters by New Pitch Group.png" width="80%" /&gt;
+&lt;img src="./Images/Movement Clusters by New Pitch Group.png" width="50%" /&gt;
+
+.bg-black-05.b--black.ba.bw1.br3.ph4.mt5[
+.left[
+- While there is still a little overlap between pitch groups, pitches are much better contained based on their movement profiles
+]]
+
+---
+class: center
+# Summary
+
+.bg-black-05.b--black.ba.bw1.br3.ph4.mt5[
+.left[
+- Adding these extra layers of context can enhance the performed analysis by granting coaches, players, and analysts the ability to compare a pitch to  smaller (more accurate) representations of a pitch.
+
+- This model is not perfect as it is greatly influenced by my prior beliefs, but it lays the foundation for what pitch clustering can bring to analysis.
+]]
+
+
+
     </textarea>
 <style data-target="print-only">@media screen {.remark-slide-container{display:block;}.remark-slide-scaler{box-shadow:none;}}</style>
 <script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>

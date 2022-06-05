@@ -71,9 +71,14 @@ classifyNewSample <- function(newData, centroids = saved_clusters) {
   order(dists)[1]
 }
 
+# Backup cluster data definition in case the full model isn't being run
+cluster_data <- cleaned_mlb |>
+  select("avg_velo_ratio", "avg_vert", "avg_horz", "avg_eff")
+
+
 # Add clusters based on saved Medoids
 mlb_clusters <- cleaned_mlb |> 
-  mutate(cluster = apply(cleaned_mlb |> select("avg_velo_ratio", "avg_vert", "avg_horz", "avg_eff"), 1, classifyNewSample),
+  mutate(cluster = apply(cluster_data, 1, classifyNewSample),
          cluster = as.factor(cluster))
 
 # Analyze pitch_names with clusters
@@ -105,7 +110,7 @@ mlb_clusters |>
        ) +
   theme(legend.position = "right", legend.direction = "vertical")
 
-ggsave("./Images/Movement Clusters.png", width = 10, height = 8, dpi = "retina")
+#ggsave("./Images/Movement Clusters.png", width = 10, height = 8, dpi = "retina")
 
 
 # Plot MLBAM pitch_names along with cluster labels
@@ -127,7 +132,7 @@ mlb_clusters |>
   ) +
   theme(legend.position = "right", legend.direction = "vertical")
 
-ggsave("./Images/Movement Clusters by Pitch Name.png", width = 10, height = 8, dpi = "retina")
+#ggsave("./Images/Movement Clusters by Pitch Name.png", width = 10, height = 8, dpi = "retina")
 
 # UMAP----------------------------------------------------------------------------------------------
 # Already have UMAP Image from previous script analysis
@@ -209,7 +214,7 @@ long_data |>
        title = "Metric Ranges By Cluster",
        subtitle = "Movement and Spin Axis Adjusted to RHP POV")
 
-ggsave("./Images/Cluster Violin Plot.png", width = 14, height = 8, dpi = "retina")
+#ggsave("./Images/Cluster Violin Plot.png", width = 14, height = 8, dpi = "retina")
 
 # Find averages for each cluster to turn into a chart
 tabular_data <- combined_data |> 
@@ -245,8 +250,8 @@ tabular_data |>
   tab_header(title = "Pitch Metric Averages By Cluster",
              subtitle = "Movement And Spin Axis Adjusted To RHP POV | Arranged By Descending Velo Ratio") |> 
   opt_align_table_header("center") |> 
-  tab_footnote("Only first four metrics used in clustering model") |> 
-  gtsave("./Images/Cluster Metric Averages.png")
+  tab_footnote("Only first four metrics used in clustering model") #|> 
+  #gtsave("./Images/Cluster Metric Averages.png")
 
 
 
@@ -266,7 +271,8 @@ results_data <- pitcher_pitch_map |>
 results_data |> 
   drop_na() |> 
   group_by(cluster) |> 
-  summarize(rv_per_100 = mean(run_value_per_100, na.rm = TRUE),
+  summarize(n = sum(pitches),
+            rv_per_100 = mean(run_value_per_100, na.rm = TRUE),
             woba = mean(woba, na.rm = TRUE),
             xwoba = mean(est_woba, na.rm = TRUE),
             whiff_perc = mean(whiff_percent, na.rm = TRUE),
@@ -274,7 +280,8 @@ results_data |>
             hh_per = mean(hard_hit_percent, na.rm = TRUE)) |> 
   gt() |> 
   gtExtras::gt_theme_538() |> 
-  cols_label(cluster = "Cluster",
+  cols_label(n = "# Thrown", 
+             cluster = "Cluster",
              rv_per_100 = "RV/100",
              woba = "wOBA",
              xwoba = "xwOBA",
@@ -286,8 +293,8 @@ results_data |>
   gtExtras::gt_hulk_col_numeric(columns = rv_per_100, reverse = TRUE) |> 
   tab_header(title = "Pitch Results By Cluster",
              subtitle = "Results averaged across pitchers and are not weighted by # of pitches thrown") |> 
-  opt_align_table_header("center") |> 
-  gtsave("./Images/Cluster Results Averages.png")
+  opt_align_table_header("center") #|> 
+  #gtsave("./Images/Cluster Results Averages.png")
 
 
 
@@ -345,7 +352,7 @@ mlb_clusters |>
   ) +
   theme(legend.position = "right", legend.direction = "vertical")
 
-ggsave("./Images/Movement Clusters by New Pitch Group.png", width = 10, height = 8, dpi = "retina")
+#ggsave("./Images/Movement Clusters by New Pitch Group.png", width = 10, height = 8, dpi = "retina")
 
 
 
