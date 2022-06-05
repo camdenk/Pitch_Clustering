@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="" xml:lang="">
+  <head>
+    <title>Pitch Clustering</title>
+    <meta charset="utf-8" />
+    <meta name="author" content="Camden Kay" />
+    <meta name="date" content="2022-06-05" />
+    <script src="libs/header-attrs/header-attrs.js"></script>
+    <link href="libs/tachyons/tachyons.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="xaringan-themer.css" type="text/css" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+.title[
+# Pitch Clustering
+]
+.author[
+### Camden Kay
+]
+.date[
+### 2022-06-05
+]
+
+---
+
+
+
+
+
+
+
+
+
+class: inverse center middle
+# Setup
+
+---
+class: center
+
+```r
+library(tidyverse)
+library(cluster)
+library(umap)
+library(gt)
+library(gtExtras)
+# library(tRead) - personal package made for common tasks
+set.seed(1)
+
+needed_columns &lt;- c("pitch_name", "release_speed",
+                    "pfx_x_pv_adj", "pfx_z",
+                    "release_spin_rate")
+
+# Load game data and remove those who didn't throw at least 150 pitches
+data &lt;- tRead::load_seasons(2021) |&gt;
+  filter(game_type == "R") |&gt;
+  group_by(pitcher) |&gt;
+  filter(n() &gt;= 150, 
+         !pitch_name %in% c("Eephus", "Fastball", "Screwball")) |&gt;
+  ungroup() |&gt;
+  drop_na(all_of(needed_columns)) |&gt;
+  tRead::add_est_spin_efficiency() |&gt;
+  drop_na(est_spin_efficiency)
+```
+
+---
+class: center
+<div>
+<style type="text/css">.xaringan-extra-logo {
+width: 40px;
+height: 40px;
+z-index: 0;
+background-image: url(https://a.espncdn.com/i/teamlogos/mlb/500/lad.png);
+background-size: contain;
+background-repeat: no-repeat;
+position: absolute;
+bottom:0.75em;left:1em;
+}
+</style>
+<script>(function () {
+  let tries = 0
+  function addLogo () {
+    if (typeof slideshow === 'undefined') {
+      tries += 1
+      if (tries < 10) {
+        setTimeout(addLogo, 100)
+      }
+    } else {
+      document.querySelectorAll('.remark-slide-content:not(.title-slide):not(.inverse):not(.hide_logo)')
+        .forEach(function (slide) {
+          const logo = document.createElement('div')
+          logo.classList = 'xaringan-extra-logo'
+          logo.href = null
+          slide.appendChild(logo)
+        })
+    }
+  }
+  document.addEventListener('DOMContentLoaded', addLogo)
+})()</script>
+</div>
+
+
+```r
+# Find "average" FB
+p_avgs &lt;- data |&gt;
+  group_by(game_year, pitcher) |&gt;
+  # Top 10% of hardest pitches thrown are used as the av. FB
+  top_frac(0.10, release_speed) |&gt; 
+  summarize(avg_velo = mean(release_speed, na.rm=TRUE))
+
+# Combine data with "averages"
+raw_data &lt;- data |&gt;
+  left_join(p_avgs,  by = c("game_year", "pitcher")) |&gt;
+  mutate(velo_ratio = if_else(release_speed/avg_velo &gt; 1, 
+                              1, release_speed/avg_velo))
+
+# Getting pitch averages differences
+cleaned_mlb &lt;- raw_data |&gt;
+  group_by(pitcher, player_name, pitch_name, pitch_type) |&gt;
+  summarize(avg_velo_ratio = mean(velo_ratio, na.rm = TRUE)*100,
+            avg_horz = mean(pfx_x_pv_adj, na.rm = TRUE),
+            avg_vert = mean(pfx_z, na.rm = TRUE),
+            avg_eff = mean(est_spin_efficiency, na.rm = TRUE)) |&gt;
+  ungroup()
+```
+
+---
+class: inverse center middle
+# Clustering
+
+---
+class: center
+# Make the Model
+
+```r
+cluster_data &lt;- cleaned_mlb |&gt; 
+  select("avg_velo_ratio", "avg_vert", "avg_horz", "avg_eff")
+  
+# Create clusters
+cleaned_clusters &lt;- pam(cluster_data, k = 17, metric = "euclidean")
+
+# Save Medoids
+write_csv(cleaned_clusters$medoids |&gt; as_tibble(), "./Medoids.csv")
+```
+
+---
+class: center
+# Cluster Function
+
+```r
+# Loading saved medoids
+saved_clusters &lt;- read_csv("./Medoids.csv")
+
+# Functions to return pitch cluster
+eucDist &lt;- function(x, y) sqrt(sum( (x-y)^2 ))
+
+classifyNewSample &lt;- function(newData, centroids = saved_clusters) {
+  dists = apply(centroids, 1, function(y) eucDist(y,newData))
+  order(dists)[1]
+}
+
+# Add clusters based on saved Medoids
+mlb_clusters &lt;- cleaned_mlb |&gt; 
+  mutate(cluster = apply(cluster_data, 1, classifyNewSample),
+         cluster = as.factor(cluster))
+```
+
+---
+class: inverse center middle
+# Analysis
+
+---
+class: center
+# Table
+
+```r
+#Analyze old pitch_names with clusters
+table(mlb_clusters$cluster, mlb_clusters$pitch_type)
+```
+
+
+```
+##     
+##       CH  CS  CU  FC  FF  FS  KC  SI  SL
+##   1    0   0   0  11 193   0   0   0   0
+##   2  201   0   0   0   1   8   0   1   0
+##   3    0   2  78   0   0   0   7   0   7
+##   4    1   0   0  76   0   2   0   0 128
+##   5    6   0   0   0  38   0   0 136   0
+##   6    4   0   0   0   5   0   0  68   0
+##   7    0   0  17   4   0   0   2   0 134
+##   8  174   0   0   0   0  13   0   0   1
+##   9    3   0  11  15   0   5   3   0 133
+##   10   3   0   0   0 148   0   0  55   0
+##   11   1   0   0  87  15   0   0   0  12
+##   12   0   1  26   0   0   0   0   0 101
+##   13   2   0   0   0  12   0   0 152   0
+##   14   4   0   0   1 241   0   0  14   0
+##   15   0   5  92   0   1   0  17   0  32
+##   16 131   0   0   0   0  23   0   1   1
+##   17   0  10 145   0   0   0  32   0   1
+```
+
+---
+class: center
+# Clustered Plots
+
+.pull-left[
+&lt;img src="./Images/Movement Clusters by Pitch Name.png" width="1067" /&gt;
+]
+
+.pull-right[
+&lt;img src="./Images/Movement Clusters.png" width="1067" /&gt;
+]
+
+---
+class: center
+# UMAP
+
+```r
+custom_config &lt;- umap.defaults
+custom_config$n_neighbors = 200
+custom_config$min_dist = .4
+
+umap_data &lt;- mlb_clusters |&gt; 
+  select("avg_velo_ratio", "avg_vert", "avg_horz", "avg_eff")
+
+umap_testing &lt;- umap(umap_data, config = custom_config)
+
+umap_plot_data &lt;- mlb_clusters |&gt;
+  mutate(x = umap_testing$layout[,1],
+         y = umap_testing$layout[,2])
+```
+
+---
+class: center
+# UMAP Plot
+
+&lt;img src="./Images/UMAP Clusters.png" width="80%" /&gt;
+
+---
+class: center
+# Testing
+
+```r
+# Map of pitchers and the clusters each of their pitches belong to
+pitcher_pitch_map &lt;- mlb_clusters |&gt; 
+  select(pitcher, player_name, pitch_name, cluster)
+
+# Combine the map with raw data and find averages for each pitch type
+combined_data &lt;- raw_data |&gt; 
+  left_join(pitcher_pitch_map) |&gt; 
+  mutate(adj_spin_axis = if_else(p_throws == "R", 
+                                 spin_axis, 360-spin_axis)) |&gt; 
+  group_by(pitcher, pitch_name, cluster) |&gt; 
+  summarize(velo_ratio = mean(velo_ratio, na.rm = TRUE),
+            pfx_z = mean(pfx_z, na.rm = TRUE),
+            pfx_x_pv_adj = mean(pfx_x_pv_adj, na.rm = TRUE),
+            est_spin_efficiency = 
+              mean(est_spin_efficiency, na.rm = TRUE),
+            release_spin_rate = mean(release_spin_rate, na.rm = TRUE),
+            adj_spin_axis = mean(adj_spin_axis, na.rm = TRUE)) |&gt; 
+  ungroup()
+```
+
+---
+class: center
+# Transform Data
+
+```r
+# Turn the combined data into a long df for plotting with a facet_wrap
+filtered_data &lt;- combined_data |&gt; 
+  select(cluster, velo_ratio, pfx_z, pfx_x_pv_adj, 
+         est_spin_efficiency, release_spin_rate, adj_spin_axis)
+
+long_data &lt;- filtered_data |&gt; 
+  pivot_longer(!cluster, names_to = "metric", values_to = "value")
+```
+
+---
+class: center
+# Metric Ranges and Distributions
+&lt;img src="./Images/Cluster Violin Plot.png" width="1493" /&gt;
+
+---
+class: center
+# Metric Averages
+&lt;img src="./Images/Cluster Metric Averages.png" width="521" /&gt;
+
+---
+class: center
+# Pitch Results Averages
+&lt;img src="./Images/Cluster Results Averages.png" width="344" /&gt;
+
+---
+class: center
+# "New" Pitch Groups
+&lt;img src="./Images/Movement Clusters by New Pitch Group.png" width="80%" /&gt;
+    </textarea>
+<style data-target="print-only">@media screen {.remark-slide-container{display:block;}.remark-slide-scaler{box-shadow:none;}}</style>
+<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+<script>var slideshow = remark.create({
+"slideNumberFormat": "%current%",
+"highlightStyle": "github",
+"highlightLines": true,
+"countIncrementalSlides": true
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
+  window.dispatchEvent(new Event('resize'));
+});
+(function(d) {
+  var s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
+  if (!r) return;
+  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
+  d.head.appendChild(s);
+})(document);
+
+(function(d) {
+  var el = d.getElementsByClassName("remark-slides-area");
+  if (!el) return;
+  var slide, slides = slideshow.getSlides(), els = el[0].children;
+  for (var i = 1; i < slides.length; i++) {
+    slide = slides[i];
+    if (slide.properties.continued === "true" || slide.properties.count === "false") {
+      els[i - 1].className += ' has-continuation';
+    }
+  }
+  var s = d.createElement("style");
+  s.type = "text/css"; s.innerHTML = "@media print { .has-continuation { display: none; } }";
+  d.head.appendChild(s);
+})(document);
+// delete the temporary CSS (for displaying all slides initially) when the user
+// starts to view slides
+(function() {
+  var deleted = false;
+  slideshow.on('beforeShowSlide', function(slide) {
+    if (deleted) return;
+    var sheets = document.styleSheets, node;
+    for (var i = 0; i < sheets.length; i++) {
+      node = sheets[i].ownerNode;
+      if (node.dataset["target"] !== "print-only") continue;
+      node.parentNode.removeChild(node);
+    }
+    deleted = true;
+  });
+})();
+// add `data-at-shortcutkeys` attribute to <body> to resolve conflicts with JAWS
+// screen reader (see PR #262)
+(function(d) {
+  let res = {};
+  d.querySelectorAll('.remark-help-content table tr').forEach(tr => {
+    const t = tr.querySelector('td:nth-child(2)').innerText;
+    tr.querySelectorAll('td:first-child .key').forEach(key => {
+      const k = key.innerText;
+      if (/^[a-z]$/.test(k)) res[k] = t;  // must be a single letter (key)
+    });
+  });
+  d.body.setAttribute('data-at-shortcutkeys', JSON.stringify(res));
+})(document);
+(function() {
+  "use strict"
+  // Replace <script> tags in slides area to make them executable
+  var scripts = document.querySelectorAll(
+    '.remark-slides-area .remark-slide-container script'
+  );
+  if (!scripts.length) return;
+  for (var i = 0; i < scripts.length; i++) {
+    var s = document.createElement('script');
+    var code = document.createTextNode(scripts[i].textContent);
+    s.appendChild(code);
+    var scriptAttrs = scripts[i].attributes;
+    for (var j = 0; j < scriptAttrs.length; j++) {
+      s.setAttribute(scriptAttrs[j].name, scriptAttrs[j].value);
+    }
+    scripts[i].parentElement.replaceChild(s, scripts[i]);
+  }
+})();
+(function() {
+  var links = document.getElementsByTagName('a');
+  for (var i = 0; i < links.length; i++) {
+    if (/^(https?:)?\/\//.test(links[i].getAttribute('href'))) {
+      links[i].target = '_blank';
+    }
+  }
+})();
+// adds .remark-code-has-line-highlighted class to <pre> parent elements
+// of code chunks containing highlighted lines with class .remark-code-line-highlighted
+(function(d) {
+  const hlines = d.querySelectorAll('.remark-code-line-highlighted');
+  const preParents = [];
+  const findPreParent = function(line, p = 0) {
+    if (p > 1) return null; // traverse up no further than grandparent
+    const el = line.parentElement;
+    return el.tagName === "PRE" ? el : findPreParent(el, ++p);
+  };
+
+  for (let line of hlines) {
+    let pre = findPreParent(line);
+    if (pre && !preParents.includes(pre)) preParents.push(pre);
+  }
+  preParents.forEach(p => p.classList.add("remark-code-has-line-highlighted"));
+})(document);</script>
+
+<script>
+slideshow._releaseMath = function(el) {
+  var i, text, code, codes = el.getElementsByTagName('code');
+  for (i = 0; i < codes.length;) {
+    code = codes[i];
+    if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
+      text = code.textContent;
+      if (/^\\\((.|\s)+\\\)$/.test(text) || /^\\\[(.|\s)+\\\]$/.test(text) ||
+          /^\$\$(.|\s)+\$\$$/.test(text) ||
+          /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
+        code.outerHTML = code.innerHTML;  // remove <code></code>
+        continue;
+      }
+    }
+    i++;
+  }
+};
+slideshow._releaseMath(document);
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>
